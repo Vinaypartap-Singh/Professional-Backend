@@ -270,7 +270,7 @@ const updateAccount = asyncHandler(async (req, res) => {
     throw new ApiError(400, "All Fields are required");
   }
 
-  const user = User.findByIdAndUpdate(
+  const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
       $set: {
@@ -340,6 +340,82 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "Cover Image Updated"));
 });
 
+const getChannnelUser = asyncHandler(async (req, res) => {
+  const { userName } = req.params;
+
+  if (!userName.trim()) {
+    throw new ApiError(400, "Inavlid ");
+  }
+
+  const channel = await User.aggregate([
+    // Pipelines
+    {
+      $match: {
+        //  Match the username in all documents to get specific information
+        userName: userName.toLowerCase(),
+      },
+    },
+    {
+      // Number of subscribers here
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      // Those channel whom I subscribed
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    {
+      // Get the count
+      $addField: {
+        subscriberCount: {
+          $size: "$subscribers",
+        },
+        channelsSubscribedTo: {
+          $size: "$subscribedTo",
+        },
+        isSubscribed: {
+          $cond: {
+            $if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        fullName: 1,
+        userName: 1,
+        subscriberCount: 1,
+        channelsSubscribedTo: 1,
+        isSubscribed: 1,
+        avatar: 1,
+        coverImage: 1,
+        email: 1,
+      },
+    },
+  ]);
+
+  if (!channel.length) {
+    throw new ApiError(404, "channel does not exist");
+  }
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, channel[0], "User Channel Fetched Successfully.")
+    );
+});
+
 export {
   registerUser,
   loginUser,
@@ -349,4 +425,6 @@ export {
   getCurrentUser,
   updateUserAvatar,
   updateUserCoverImage,
+  updateAccount,
+  getChannnelUser,
 };
